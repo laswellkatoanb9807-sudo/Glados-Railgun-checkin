@@ -212,6 +212,7 @@ class API:
         return {
             "origin": f"https://{self.domain}",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36",
+            "Content-Type": "application/json",
         }
 
     def _log(self, level: str, emoji: str, message: str, force: bool = False) -> None:
@@ -474,13 +475,23 @@ class Checker:
 
             # 4. 执行兑换
             required_points = self.config.EXCHANGE_PLANS.get(self.config.exchange_plan, 500)
-            self._log(
-                cookie_idx,
-                domain,
-                LogEmoji.EXCHANGE,
-                f"开始兑换 {self.config.exchange_plan} (需要 {required_points} 积分)",
-            )
-            result.exchange = api.exchange(cookie, self.config.exchange_plan, required_points)
+            if points_num >= required_points:
+                self._log(
+                    cookie_idx,
+                    domain,
+                    LogEmoji.EXCHANGE,
+                    f"积分足够({points_num}/{required_points})，开始兑换 {self.config.exchange_plan}",
+                )
+                result.exchange = api.exchange(cookie, self.config.exchange_plan, required_points)
+            else:
+                self._log(
+                    cookie_idx,
+                    domain,
+                    LogEmoji.INFO,
+                    f"积分不足({points_num}/{required_points})，跳过兑换",
+                    force=True,
+                )
+                result.exchange = f"积分不足({points_num}/{required_points})，未兑换"
 
         return result
 
