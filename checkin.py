@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import sys
 import logging
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
@@ -532,6 +533,8 @@ logger = init_logger()
 
 def main():
     """主函数"""
+    # 退出码：非 0 时让 Actions 变红，避免「全失败仍显示绿色」的静默失败
+    exit_code = 0
     try:
         # 1. 加载配置
         logger.info(f"{LogEmoji.START} 步骤 1: 加载配置")
@@ -540,6 +543,7 @@ def main():
         if not config.cookies_list:
             logger.error(f"{LogEmoji.ERROR} 未找到有效的 Cookie, 退出程序。")
             title, content = "# 未找到 cookies!", ""
+            exit_code = 1
         else:
             # 2. 执行签到
             logger.info(f"{LogEmoji.START} 步骤 2: 执行签到")
@@ -551,15 +555,32 @@ def main():
             title, content, log_content = checker.format_results()
             logger.info(f"\n{LogEmoji.END}========== 签到总结 ==========\n{title}\n{log_content}")
 
+            # 无「成功」也无「重复」= Cookie 失效或全站异常，判为失败
+            ok_count = sum(
+                1
+                for r in checker.get_results()
+                if r["code"] in (CheckinStatus.SUCCESS, CheckinStatus.REPEAT)
+            )
+            if ok_count == 0:
+                exit_code = 1
+
     except Exception as e:
         logger.error(f"{LogEmoji.ERROR} 主程序执行过程中发生未预期的错误: {e}")
         title, content, log_content = "# 脚本执行出错", str(e), str(e)
+        exit_code = 1
 
     # 4. 发送推送
     logger.info(f"{LogEmoji.START} 步骤 4: 发送推送")
     push_service = PushService(config if "config" in locals() else "")
     push_service.send(title, content)
     logger.info(f"{LogEmoji.END} 签到完成")
+
+    if exit_code:
+        logger.error(
+            f"{LogEmoji.ERROR} 告警：本次没有任何账号签到成功（成功0 且 重复0），"
+            "以退出码 1 结束以便 Actions 标红提醒。"
+        )
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":
